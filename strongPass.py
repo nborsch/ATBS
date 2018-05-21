@@ -5,7 +5,7 @@
 # from "Automate The Boring Stuff", by Al Sweigart,
 # Chapter 7.
 # 
-# Nadia Borsch      misc@nborsch.com        2018
+# Nadia Borsch      misc@nborsch.com        May/2018
 
 import re
 
@@ -19,6 +19,18 @@ digit = re.compile(r'[0-9]+')
 
 # TODO: check if password is at least 8 characters long
 
+if len(password) < 8:
+    print('\nYour password is too short.')
+
 # TODO: check if password contains both uppercase and lowercase characters
 
+elif upperLower.search(password) == None:
+    print('\nA strong password must have both uppercase and lowercase characters.')
+
 # TODO check if password has at least one digit
+
+elif digit.search(password) == None:
+    print('\nA strong password must have at least one digit.')
+
+else:
+    print('\nAll good!')
