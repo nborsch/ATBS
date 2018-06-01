@@ -20,7 +20,7 @@ print('{:>40}'.format("------- --- ----"))
 
 # Obtain folder path from user
 while True:
-    folder_path = os.path.abspath(input("Please enter the path for the folder path where files are located.\n"))
+    folder_path = os.path.abspath(input("Please enter the path for the folder where files are located.\n"))
     if not os.path.exists(folder_path):
         print(f"{folder_path} doesn't exist.")
     else:
