@@ -18,10 +18,6 @@
 # 
 # Nadia Borsch      misc@nborsch.com        Jun/2018
 
-# TODO:
-# 3 Start threading
-
-
 import csv, bs4, datetime, os, requests, threading, time
 
 def downloader(title, base_url, element, comic_img=False, check=True):
