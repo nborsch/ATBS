@@ -28,7 +28,7 @@ from bs4 import BeautifulSoup
 import datetime
 import requests
 
-def downloader(title, base_url, element, saved_filename=None, check=True):
+def downloader(title, base_url, element, saved_filename=None):
     """Downloads latest web comics"""
     res = requests.get(base_url)
     res.raise_for_status()
@@ -45,7 +45,7 @@ def downloader(title, base_url, element, saved_filename=None, check=True):
         comic_filename = os.path.basename(comic_url)
 
         # Check current comic file against saved file
-        if check and saved_filename and comic_filename.lower() == saved_filename.lower():
+        if saved_filename and comic_filename.lower() == saved_filename.lower():
             # No updates have been found
             print(f"No updates for {title}.")
         else:
@@ -58,6 +58,11 @@ def downloader(title, base_url, element, saved_filename=None, check=True):
 
             res = requests.get(comic_url)
             res.raise_for_status()
+
+            # Create folder on desktop to save all files
+            current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+            folder = f"C:{os.path.join(os.environ['HOMEPATH'], 'Desktop')}\\{current_date} Web Comics"
+            os.makedirs(folder, exist_ok=True)
 
             with open(f"{folder}\{comic_filename}", "wb") as comic_file:
                 for part in res.iter_content(100000):
@@ -95,12 +100,6 @@ def main():
 
     except FileNotFoundError:
         last_visit_data = {}
-
-    # Create folder on desktop to save all files
-    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    global folder # TODO
-    folder = f"C:{os.path.join(os.environ['HOMEPATH'], 'Desktop')}\\{current_date} Web Comics"
-    os.makedirs(folder, exist_ok=True)
 
     # Data structure for the updated comics info
     global current_visit_data # TODO
