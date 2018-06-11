@@ -28,7 +28,7 @@ from bs4 import BeautifulSoup
 import datetime
 import requests
 
-def downloader(title, base_url, element, saved_filename=None):
+def downloader(title, base_url, element, current_visit_data, saved_filename=None):
     """Downloads latest web comics"""
     res = requests.get(base_url)
     res.raise_for_status()
@@ -40,6 +40,7 @@ def downloader(title, base_url, element, saved_filename=None):
     if comic_elem == []:
         # Skip comic, not found
         print(f"Could not find current comic for {title}.")
+        return None
     else:
         comic_url = comic_elem[0].get("src")
         comic_filename = os.path.basename(comic_url)
@@ -48,6 +49,7 @@ def downloader(title, base_url, element, saved_filename=None):
         if saved_filename and comic_filename.lower() == saved_filename.lower():
             # No updates have been found
             print(f"No updates for {title}.")
+            return None
         else:
             # Get and save comic
             print(f"Downloading latest comic from {title}...")
@@ -85,7 +87,7 @@ def main():
             ":: Wonderella\t\t\t"
             ":: Moonbeard\n"
             ":: Happle Tea\t\t\t"
-            ":: Saturday Morning Breakfast Cereal"),
+            ":: Saturday Morning Breakfast Cereal\n"),
     print("Comics will be saved on your Desktop under 'Updated Web Comics'.\n")
 
     # Open CSV file that stores last visit's dates
@@ -101,8 +103,7 @@ def main():
     except FileNotFoundError:
         last_visit_data = {}
 
-    # Data structure for the updated comics info
-    global current_visit_data # TODO
+    # Data structure for the comics updated info
     current_visit_data = {"Last Checked:": time.time()}
 
     # Comics to check and their parameters
@@ -122,10 +123,11 @@ def main():
     # Create and start thread objects
     downloads = []
     for comic in comics:
+        comic.append(current_visit_data)
         if comic[0] in last_visit_data.keys():
             # Comic has been checked before, send saved filename as argument
             comic.append(last_visit_data[comic[0]])
-        
+
         download = threading.Thread(target=downloader, args=comic)
         downloads.append(download)
         download.start()
