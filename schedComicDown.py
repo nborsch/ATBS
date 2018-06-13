@@ -28,8 +28,15 @@ from bs4 import BeautifulSoup
 import datetime
 import requests
 
-def downloader(title, base_url, element, current_visit_data, saved_filename=None):
+
+def downloader(
+    title, 
+    base_url, 
+    element, 
+    current_visit_data, 
+    saved_filename=None):
     """Downloads latest web comics"""
+    
     res = requests.get(base_url)
     res.raise_for_status()
 

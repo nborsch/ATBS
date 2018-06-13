@@ -1,23 +1,23 @@
- #! python3
+#! python3
 # -*- coding: utf-8 -*-
 #
 # Solution to Practice Project "Random Chore Assignment Emailer"
 # from "Automate The Boring Stuff", by Al Sweigart,
 # Chapter 16.
 #
-# "Write a program that takes a list of people’s email addresses 
-# and a list of chores that need to be done and randomly assigns 
-# chores to people. Email each person their assigned chores. If 
-# you’re feeling ambitious, keep a record of each person’s 
-# previously assigned chores so that you can make sure the program 
-# avoids assigning anyone the same chore they did last time. For 
-# another possible feature, schedule the program to run once a 
+# "Write a program that takes a list of people’s email addresses
+# and a list of chores that need to be done and randomly assigns
+# chores to people. Email each person their assigned chores. If
+# you’re feeling ambitious, keep a record of each person’s
+# previously assigned chores so that you can make sure the program
+# avoids assigning anyone the same chore they did last time. For
+# another possible feature, schedule the program to run once a
 # week automatically."
-# 
+#
 # CSV files requirements:
 # * residents.csv: <resident name>,<resident email>
 # * chores.csv: <chore>
-# 
+#
 # Nadia Borsch      misc@nborsch.com        Jun/2018
 
 import csv
@@ -28,15 +28,15 @@ import re
 import smtplib
 
 
-def notFound():
+def not_found():
     """Alert user that file was not found and quit program"""
 
     print("File not found, please try again.")
     quit()
 
 
-def pickChore(chores, residents, records):
-    """Pick a random chore for each resident, considering 
+def pick_chore(chores, residents, records):
+    """Pick a random chore for each resident, considering
     the record of previously assigned chores"""
 
     assignments = []
@@ -44,7 +44,7 @@ def pickChore(chores, residents, records):
     for resident, email in residents.items():
 
         # No record of previously assigned chores
-        if records == {}:
+        if not records:
             chore = choice(chores)
         else:
             # Make sure assigned chore is not a repeat of last time
@@ -56,13 +56,13 @@ def pickChore(chores, residents, records):
         # Assign chore and remove it from chores list
         assignments.append([resident, email, chore])
         chores.remove(chore)
-    
+
     # Returns dictionary of residents, their emails, and their assigned chores
     return assignments
 
 
-def saveRecords(assignments):
-    """Takes on a dictionary of residents and their assigned 
+def save_records(assignments):
+    """Takes on a dictionary of residents and their assigned
     chores and saves the data into a csv file"""
 
     with open("records.csv", "w", newline="") as records:
@@ -70,10 +70,10 @@ def saveRecords(assignments):
 
         for assignment in assignments:
             # Save name, email, and chore for current assignments
-            records_writer.writerow([assignment[0], assignment[1], assignment[2]])
+            records_writer.writerow([*assignment])
 
 
-def validateEmail(email):
+def validate_email(email):
     """Checks if an input is a properly formatted email address
     using regex and returns True or False"""
 
@@ -85,13 +85,10 @@ def validateEmail(email):
         (\.[a-zA-Z]{2,4})      # top level domain name
     )''', re.VERBOSE)
 
-    if regex.search(email):
-        return True
-    else:
-        return False
+    return bool(regex.search(email))
 
 
-def mailAssignments(email, pwd, assignments):
+def mail_assignments(email, pwd, assignments):
     """Composes and emails assigned chore to corresponding resident"""
 
     smtp = smtplib.SMTP("smtp.gmail.com", 587)
@@ -102,9 +99,7 @@ def mailAssignments(email, pwd, assignments):
     for assignment in assignments:
 
         from_address = email
-        to_name = assignment[0]
-        to_address = assignment[1]
-        chore = assignment[2]
+        to_name, to_address, chore = assignment
         body = (
             f"Subject: Your house chore\nHello, {to_name},\n\n"
             f"Your chore is:\n\n"
@@ -129,18 +124,20 @@ def main():
 
     # Get residents info csv file
     print(f"Current working directory is {os.getcwd()}.")
-    
+
     while True:
         residents_file = input("Please enter the residents info csv file:\n")
         if residents_file.endswith(".csv"):
             break
-    
+
     # Get chores csv file
     while True:
-        chores_file = input("\nPlease enter the chores csv file (one chore per line):\n")
+        chores_file = input(
+            "\nPlease enter the chores csv file (one chore per line):\n"
+            )
         if chores_file.endswith(".csv"):
             break
-    
+
     # Load residents info csv file
     try:
         with open(residents_file) as residents_csv:
@@ -152,8 +149,8 @@ def main():
                 residents_info[row[0]] = row[1]
 
     except FileNotFoundError:
-        notFound()
-        
+        not_found()
+
     # Load chores csv file
     try:
         with open(chores_file) as chores_csv:
@@ -165,7 +162,7 @@ def main():
                 chores_list.append(row[0])
 
     except FileNotFoundError:
-        notFound()
+        not_found()
 
     # Load records of previously assigned chores
     try:
@@ -181,26 +178,30 @@ def main():
         records_info = {}
 
     print("\nAssigning chores...")
-    assigned_chores = pickChore(chores_list, residents_info, records_info)
+    assigned_chores = pick_chore(chores_list, residents_info, records_info)
 
     print("Saving record of assigned chores...")
-    saveRecords(assigned_chores)
+    save_records(assigned_chores)
 
     # Get email account username
     while True:
-        email = input("\nPlease enter the Gmail address from which to send assignment messages:\n")
-        if validateEmail(email) == True:
+        email = input(
+            "\nPlease enter the Gmail address from which to send "
+            "assignment messages:\n"
+            )
+        if validate_email(email) is True:
             break
-    
+
     # Get email account password
     while True:
         pwd = getpass(f"\nPlease enter the Gmail password for {email}:\n")
         if pwd:
             break
 
-    mailAssignments(email, pwd, assigned_chores)
+    mail_assignments(email, pwd, assigned_chores)
 
     print("\nAll done!")
+
 
 if __name__ == '__main__':
     main()
