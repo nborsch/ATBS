@@ -20,6 +20,7 @@
 #
 # Nadia Borsch      misc@nborsch.com        Jun/2018
 
+from datetime import datetime
 from getpass import getpass
 import imaplib
 import webbrowser
@@ -28,14 +29,12 @@ from bs4 import BeautifulSoup
 import imapclient
 import pyzmail
 
-# TODO
-# Pass IMAP functions to each other
-# Open URLs in browser using webbrowser.open()
-
 
 def validate_email(email):
-    """Validates a string for properly formatted
-    email address and returns True or False"""
+    """
+    Validates a string for properly formatted
+    email address and returns True or False
+    """
 
     regex = re.compile(
         r'''[a-zA-Z0-9._%+-]+   # username
@@ -49,8 +48,10 @@ def validate_email(email):
 
 
 def find_imap(email):
-    """Figures out and returns the IMAP client according to email address.
-    Works with Gmail, Hotmail, and Yahoo ('.com' addresses only)"""
+    """
+    Figures out and returns the IMAP client according to email address.
+    Works with Gmail, Hotmail, and Yahoo ('.com' addresses only)
+    """
 
     provider = email.split("@")[1]
 
@@ -63,7 +64,9 @@ def find_imap(email):
 
 
 def login_imap(username, pwd):
-    """Logs 'username' into 'imap' client and returns IMAPClient object."""
+    """
+    Logs 'username' into 'imap' client and returns IMAPClient object.
+    """
 
     print("Logging into email account...")
     imap_client = imapclient.IMAPClient(find_imap(username), ssl=True)
@@ -78,65 +81,88 @@ def login_imap(username, pwd):
 
 
 def email_search(imap_client):
-    """Returns a list with the UIDs of all email messages in the user's
-    inbox."""
+    """
+    Searches user's inbox and returns the UID of all the email messages
+    that have the word "unsubscribe" (case insensitive) somewhere in the body.
+    """
 
     # Bypass size limit
     imaplib._MAXLINE = 10000000
 
     print("Retrieving messages...")
     imap_client.select_folder("INBOX", readonly=True)
-    UIDs = imap_client.search(["ALL"])
+    months = [i for i in range(1, 13)]
+    # Years to date since Hotmail launch
+    years = [i for i in range(1996, datetime.now().year + 1)]
 
-    return UIDs
+    for year in years:
+        for month in months:
+            since = datetime(year, month, 1).strftime('%d-%b-%Y')
+            before = datetime(year, month % 12 + 1, 1).strftime('%d-%b-%Y')
+
+            yield imap_client.search([
+                "TEXT", "unsubscribe",
+                "SINCE", since,
+                "BEFORE", before
+                ])
 
 
-def find_msgs(UIDs, imap_client):
-    """Searches through each message in the user's inbox for
-    'unsubscribe' links and returns a list of such links"""
+def raw_msgs():
+    """
+    Processes an UID to return the raw message body
+    """
 
-    raw_msgs = imap_client.fetch(UIDs, ['BODY[]'])
+    UID = email_search(imap_client)
 
-    messages = []
+    return imap_client.fetch([UID], ['BODY[]'])
+
+
+def msg_body():
+    """
+    """
+
+    raw_msgs()
 
     for UID in raw_msgs:
-        message = pyzmail.PyzMessage.factory(raw_msgs[UID][b'BODY[]'])
-        message = message.html_part.get_payload().decode(
-            message.html_part.charset)
+        msg_body = pyzmail.PyzMessage.factory(raw_msgs[UID][b'BODY[]'])
+        msg_body = msg_body.html_part.get_payload().decode(
+            msg_body.html_part.charset)
 
-        messages.append(message)
-
-    return messages
+        yield msg_body
 
 
-def find_unsub_links(messages):
-    """Takes in a list of HTML message bodies and parses them for
-    'unsubscribe' links"""
+def unsub_links():
+    """
+    Takes in an HTML message body and parses it for
+    'unsubscribe' links and returns such links if found
+    """
 
-    regex = re.compile(".*(unsubscribe|Unsubscribe|UNSUBSCRIBE).*")
+    msg_body()
+
+    regex = re.compile(".*(unsubscribe).*", re.I)
     unsub_links = []
 
     print("Finding 'unsubscribe' links...")
-    for message in messages:
-        # Parse each message for links
-        soup = BeautifulSoup(message, "lxml")
-        link_elems = soup.select("a")
+    # Parse each message for links
+    soup = BeautifulSoup(message, "lxml")
+    link_elems = soup.select("a")
 
-        # Parse each link for the word "unsubscribe"
-        # If found, add to links list
-        for link_elem in link_elems:
-            if regex.search(link_elem.getText()):
+    # Parse each link for the word "unsubscribe"
+    # If found, add to links list
+    for link_elem in link_elems:
+        if regex.search(link_elem.getText()):
                 unsub_links.append(link_elem.get("href"))
 
     return unsub_links
 
 
-def open_links(links):
-    """Takes in a list of links and opens them in the browser."""
+def open_link(link):
+    """
+    Takes in a link and opens it in a browser tab
+    """
 
     print("Opening links in browser...\n")
-    for link in links:
-        webbrowser.open(link)
+    webbrowser.open(link)
 
 
 def main():
@@ -156,13 +182,15 @@ def main():
         if pwd:
             break
 
-    # Log user in and retrieve UIDs for all messages
+    # Log user in
     imap_client = login_imap(username, pwd)
-    UIDs = email_search(imap_client)
 
-    # Retrieve all links and parse for 'unsubscribe' links
-    links = find_unsub_links(find_msgs(UIDs, imap_client))
-    open_links(links)
+    # Get all links
+    unsub_links = unsub_links()
+
+    # Retrieve all links and opens them in browser
+    for link in unsub_links:
+        open_link(link)
 
     # Disconnect from IMAP server
     imap_client.logout()
