@@ -93,18 +93,23 @@ def email_search(imap_client):
     imap_client.select_folder("INBOX", readonly=True)
     months = [i for i in range(1, 13)]
     # Years to date since Hotmail launch
-    years = [i for i in range(1996, datetime.now().year + 1)]
+    years = [i for i in range(2017, datetime.now().year + 1)]
+
+    UIDs = []
 
     for year in years:
         for month in months:
             since = datetime(year, month, 1).strftime('%d-%b-%Y')
             before = datetime(year, month % 12 + 1, 1).strftime('%d-%b-%Y')
-
-            yield imap_client.search([
+            batch = imap_client.search([
                 "TEXT", "unsubscribe",
                 "SINCE", since,
                 "BEFORE", before
                 ])
+            if batch:
+                UIDs += batch
+
+    return UIDs
 
 
 def raw_msgs(imap_client):
@@ -112,23 +117,23 @@ def raw_msgs(imap_client):
     Processes an UID to return the raw message body
     """
 
-    UID = email_search(imap_client)
+    UIDs = email_search(imap_client)
 
-    return imap_client.fetch([UID], ['BODY[]'])
+    return imap_client.fetch(UIDs, ['BODY[]'])
 
 
 def msg_body(imap_client):
     """
     """
 
-    raw_msgs(imap_client)
+    raw = raw_msgs(imap_client)
 
-    for UID in raw_msgs:
-        msg_body = pyzmail.PyzMessage.factory(raw_msgs[UID][b'BODY[]'])
-        msg_body = msg_body.html_part.get_payload().decode(
-            msg_body.html_part.charset)
+    for UID in raw:
+        message = pyzmail.PyzMessage.factory(raw[UID][b'BODY[]'])
+        message = message.html_part.get_payload().decode(
+            message.html_part.charset)
 
-        yield msg_body
+        yield message
 
 
 def unsub_links(imap_client):
@@ -136,24 +141,25 @@ def unsub_links(imap_client):
     Takes in an HTML message body and parses it for
     'unsubscribe' links and returns such links if found
     """
-    import ipdb; ipdb.set_trace()
-    message = msg_body(imap_client)
+
+    messages = list(msg_body(imap_client))
 
     regex = re.compile(".*(unsubscribe).*", re.I)
-    unsub_links = []
+    links = []
 
     print("Finding 'unsubscribe' links...")
-    # Parse each message for links
-    soup = BeautifulSoup(message, "lxml")
-    link_elems = soup.select("a")
+    for message in messages:
+        # Parse each message for links
+        soup = BeautifulSoup(message, "lxml")
+        link_elems = soup.select("a")
 
-    # Parse each link for the word "unsubscribe"
-    # If found, add to links list
-    for link_elem in link_elems:
-        if regex.search(link_elem.getText()):
-                unsub_links.append(link_elem.get("href"))
+        # Parse each link for the word "unsubscribe"
+        # If found, add to links list
+        for link_elem in link_elems:
+            if regex.search(link_elem.getText()):
+                    links.append(link_elem.get("href"))
 
-    return unsub_links
+    return links
 
 
 def open_link(link):
