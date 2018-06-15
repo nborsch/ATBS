@@ -29,8 +29,6 @@ from bs4 import BeautifulSoup
 import imapclient
 import pyzmail
 
-# TODO
-
 
 def validate_email(email):
     """
@@ -52,7 +50,7 @@ def validate_email(email):
 def find_imap(email):
     """
     Figures out and returns the IMAP client according to email address.
-    Works with Gmail, Hotmail, and Yahoo ('.com' addresses only)
+    Works with Gmail, Hotmail, and Yahoo ('.com' addresses only.)
     """
 
     provider = email.split("@")[1]
@@ -96,10 +94,8 @@ def email_search(imap_client):
     # From this year backwards until Hotmail launch
     years = [i for i in range(datetime.now().year, 1995, -1)]
 
-    UIDs = []
-
     for year in years:
-        # Retrieve messages for a one-year period at a time 
+        # Retrieve messages for a one-year period at a time
         since = datetime(year - 1, 12, 31).strftime('%d-%b-%Y')
         before = datetime(year, 12, 31).strftime('%d-%b-%Y')
         batch = imap_client.search([
@@ -108,45 +104,47 @@ def email_search(imap_client):
             "BEFORE", before
             ])
         if batch:
-            UIDs += batch
-
-    return UIDs
+            yield batch
 
 
 def raw_msgs(imap_client):
     """
-    Processes an UID to return the raw message body
+    Processes email messages by UID and returns the raw message body.
     """
 
-    UIDs = email_search(imap_client)
-
-    return imap_client.fetch(UIDs, ['BODY[]'])
+    return imap_client.fetch(list(email_search(imap_client))[0], ['BODY[]'])
 
 
 def msg_body(imap_client):
     """
+    Processes raw message bodies into HTML.
+    Returns the sender and the HTML body.
     """
     raw = raw_msgs(imap_client)
 
     for UID in raw:
         message = pyzmail.PyzMessage.factory(raw[UID][b'BODY[]'])
         sender = message.get_address("from")
+
         if len(sender) > 1:
             sender = sender[1]
         else:
             sender = sender[2]
+
         message = message.html_part.get_payload().decode(
             message.html_part.charset)
 
         yield sender, message
 
+
 def check_senders(imap_client):
     """
+    Checks if there are duplicate senders in message list.
+    Returns only messages with unique senders.
     """
 
     messages = list(msg_body(imap_client))
     senders = []
-    bodies = []
 
     for message in messages:
         sender = message[0]
