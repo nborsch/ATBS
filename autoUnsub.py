@@ -107,7 +107,7 @@ def email_search(imap_client):
                 ])
 
 
-def raw_msgs():
+def raw_msgs(imap_client):
     """
     Processes an UID to return the raw message body
     """
@@ -117,11 +117,11 @@ def raw_msgs():
     return imap_client.fetch([UID], ['BODY[]'])
 
 
-def msg_body():
+def msg_body(imap_client):
     """
     """
 
-    raw_msgs()
+    raw_msgs(imap_client)
 
     for UID in raw_msgs:
         msg_body = pyzmail.PyzMessage.factory(raw_msgs[UID][b'BODY[]'])
@@ -131,13 +131,13 @@ def msg_body():
         yield msg_body
 
 
-def unsub_links():
+def unsub_links(imap_client):
     """
     Takes in an HTML message body and parses it for
     'unsubscribe' links and returns such links if found
     """
-
-    msg_body()
+    import ipdb; ipdb.set_trace()
+    message = msg_body(imap_client)
 
     regex = re.compile(".*(unsubscribe).*", re.I)
     unsub_links = []
@@ -186,10 +186,10 @@ def main():
     imap_client = login_imap(username, pwd)
 
     # Get all links
-    unsub_links = unsub_links()
+    links = unsub_links(imap_client)
 
     # Retrieve all links and opens them in browser
-    for link in unsub_links:
+    for link in links:
         open_link(link)
 
     # Disconnect from IMAP server
