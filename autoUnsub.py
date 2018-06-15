@@ -29,6 +29,8 @@ from bs4 import BeautifulSoup
 import imapclient
 import pyzmail
 
+# TODO
+
 
 def validate_email(email):
     """
@@ -91,23 +93,22 @@ def email_search(imap_client):
 
     print("Retrieving messages...")
     imap_client.select_folder("INBOX", readonly=True)
-    months = [i for i in range(1, 13)]
-    # Years to date since Hotmail launch
-    years = [i for i in range(2017, datetime.now().year + 1)]
+    # From this year backwards until Hotmail launch
+    years = [i for i in range(datetime.now().year, 1995, -1)]
 
     UIDs = []
 
     for year in years:
-        for month in months:
-            since = datetime(year, month, 1).strftime('%d-%b-%Y')
-            before = datetime(year, month % 12 + 1, 1).strftime('%d-%b-%Y')
-            batch = imap_client.search([
-                "TEXT", "unsubscribe",
-                "SINCE", since,
-                "BEFORE", before
-                ])
-            if batch:
-                UIDs += batch
+        # Retrieve messages for a one-year period at a time 
+        since = datetime(year - 1, 12, 31).strftime('%d-%b-%Y')
+        before = datetime(year, 12, 31).strftime('%d-%b-%Y')
+        batch = imap_client.search([
+            "TEXT", "unsubscribe",
+            "SINCE", since,
+            "BEFORE", before
+            ])
+        if batch:
+            UIDs += batch
 
     return UIDs
 
@@ -125,15 +126,34 @@ def raw_msgs(imap_client):
 def msg_body(imap_client):
     """
     """
-
     raw = raw_msgs(imap_client)
 
     for UID in raw:
         message = pyzmail.PyzMessage.factory(raw[UID][b'BODY[]'])
+        sender = message.get_address("from")
+        if len(sender) > 1:
+            sender = sender[1]
+        else:
+            sender = sender[2]
         message = message.html_part.get_payload().decode(
             message.html_part.charset)
 
-        yield message
+        yield sender, message
+
+def check_senders(imap_client):
+    """
+    """
+
+    messages = list(msg_body(imap_client))
+    senders = []
+    bodies = []
+
+    for message in messages:
+        sender = message[0]
+
+        if sender not in senders:
+            senders.append(sender)
+            yield message[1]
 
 
 def unsub_links(imap_client):
@@ -142,24 +162,21 @@ def unsub_links(imap_client):
     'unsubscribe' links and returns such links if found
     """
 
-    messages = list(msg_body(imap_client))
+    bodies = list(check_senders(imap_client))
 
     regex = re.compile(".*(unsubscribe).*", re.I)
-    links = []
 
     print("Finding 'unsubscribe' links...")
-    for message in messages:
+    for body in bodies:
         # Parse each message for links
-        soup = BeautifulSoup(message, "lxml")
+        soup = BeautifulSoup(body, "lxml")
         link_elems = soup.select("a")
 
         # Parse each link for the word "unsubscribe"
         # If found, add to links list
         for link_elem in link_elems:
             if regex.search(link_elem.getText()):
-                    links.append(link_elem.get("href"))
-
-    return links
+                    yield link_elem.get("href")
 
 
 def open_link(link):
@@ -167,7 +184,7 @@ def open_link(link):
     Takes in a link and opens it in a browser tab
     """
 
-    print("Opening links in browser...\n")
+    print("Opening link in browser...")
     webbrowser.open(link)
 
 
