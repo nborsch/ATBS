@@ -27,7 +27,7 @@ import imapclient
 import pyzmail
 
 # TODO
-# ! Text after successful command execution
+# ! Configure texting
 # ! Logging
 
 # Constants
@@ -112,11 +112,12 @@ def process_msgs(messages):
 
     magnets = find_magnets(msgs_html)
 
-    handle_magnets(magnets)
+    for magnet in magnets:
+        launch_threads(magnet)
 
     # TODO find and execute commands
 
-    # Delete emails after execution
+    # Delete emails after execution TODO
     #delete_msgs(messages)
 
     # Log out of account
@@ -176,26 +177,12 @@ def find_magnets(msgs_html):
                 yield div.getText()
 
 
-def handle_magnets(magnets):
-    """
-    """
-
-    for magnet in magnets:
-        launch_threads(magnet)
-
-
 def launch_threads(magnet):
     """
     """
 
-    thread = Thread(target=worker, args=(magnet,))
+    thread = Thread(target=open_magnet, args=(magnet,))
     thread.start()
-
-def worker(magnet):
-    """
-    """
-
-    open_magnet(magnet)
 
 
 def open_magnet(magnet):
@@ -209,7 +196,7 @@ def open_magnet(magnet):
             send_txt(magnet)
             break
         
-        time.sleep(10)
+        time.sleep(2)
 
 
 def send_txt(magnet):
@@ -217,7 +204,7 @@ def send_txt(magnet):
     """
 
     txt = magnet.split("=")[2]
-    print(raw_txt)
+    print(txt)
 
 
 def main():
