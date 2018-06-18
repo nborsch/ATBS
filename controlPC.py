@@ -17,21 +17,28 @@
 # Nadia Borsch      misc@nborsch.com        Jun/2018
 
 from getpass import getpass
+import logging
 import re
-from subprocess import Popen
-from threading import Thread
+import subprocess
 import time
 from bs4 import BeautifulSoup
 import imaplib
 import imapclient
+from twilio.rest import Client
 import pyzmail
-
-# TODO
-# ! Configure texting
-# ! Logging
 
 # Constants
 TORRENT = "C:\\Program Files\\qBittorrent\\qbittorrent.exe"
+SMS_TO = ""
+SMS_FROM = ""
+TWILIO_ACCT = ""
+TWILIO_TOKEN = ""
+
+# Logging configuration
+logging.basicConfig(
+    filename="controlPC.log",
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s \n')
 
 
 def validate_email(email):
@@ -53,6 +60,9 @@ def validate_email(email):
 
 def check_email(username, password, key, email):
     """
+    Checks an email account for new messages that match the criteria for a
+    torrent download. Returns a tuple with the IMAPClient object and a list
+    of UIDs of the matching messages.
     """
 
     # Log user in
@@ -68,7 +78,10 @@ def check_email(username, password, key, email):
     else:
         new_mail = imap_client.search(["TEXT", key, "FROM", email])
 
+    logging.info("Email account successfully checked.")
+
     if new_mail:
+        logging.info("Email command found.")
         return imap_client, new_mail
 
 
@@ -97,8 +110,12 @@ def login_imap(username, pwd):
 
     try:
         imap_client.login(username, pwd)
-    except imaplib.IMAP4.error:
+        logging.info("Email account login successful.")
+
+    except (imaplib.IMAP4.error, UnicodeEncodeError):
         print(f"Invalid username and/or password. Please try again.")
+        logging.info("Email account login unsuccessful.")
+
         quit()
 
     return imap_client
@@ -106,26 +123,32 @@ def login_imap(username, pwd):
 
 def process_msgs(messages):
     """
+    Handles processing of messages for extraction of magnets, messages
+    deletion, and logging out of IMAP server. Takes a tuple of an IMAPClient
+    object and a list of UIDs, and returns a generator object for the
+    extracted magnet links.
     """
+
+    logging.info("Starting processing of email command(s).")
 
     msgs_html = get_msgs(get_raw_msgs(messages))
 
     magnets = find_magnets(msgs_html)
 
-    for magnet in magnets:
-        launch_threads(magnet)
-
-    # TODO find and execute commands
-
-    # Delete emails after execution TODO
-    #delete_msgs(messages)
+    # Delete emails after execution
+    delete_msgs(messages)
 
     # Log out of account
     messages[0].logout()
 
+    return magnets
+
 
 def get_raw_msgs(messages):
     """
+    Fetches the raw body of email messages from an IMAP server. Takes in a
+    tuple with the IMAPClient object and a list of UIDs. Returns a list with
+    the raw body of all fetched messages.
     """
 
     imap_client, UIDs = messages
@@ -136,22 +159,22 @@ def get_raw_msgs(messages):
 
 def get_msgs(raw_msgs):
     """
+    Processes raw message body into HTML message body. Takes in a list with
+    raw message bodies and returns a generator object of HTML message bodies.
     """
-
-    ready_msgs = []
 
     for raw_msg in raw_msgs:
         message = pyzmail.PyzMessage.factory(raw_msgs[raw_msg][b'BODY[]'])
         message = message.html_part.get_payload().decode(
             message.html_part.charset)
 
-        ready_msgs.append(message)
-
-    return ready_msgs
+        yield message
 
 
 def delete_msgs(messages):
     """
+    Deletes email messages from an IMAP server. Takes in a tuple with the
+    IMAPClient object and a list of UIDs.
     """
 
     imap_client, UIDs = messages
@@ -160,51 +183,66 @@ def delete_msgs(messages):
     try:
         imapclient.expunge()
     except AttributeError:
+        # For some IMAP servers, expunge() isn't necessary
         pass
 
 
 def find_magnets(msgs_html):
     """
+    Extracts torrent magnet links from HTML message bodies using regex. Takes
+    in a generator object of HTML message bodies and return a generator object
+    of complete magnet links.
     """
 
-    for html in msgs_html:
-        soup = BeautifulSoup(html, "lxml")
+    regex = re.compile(r"(magnet:\?xt=urn:btih:\S+)(&amp;dn=|&dn=)([^<\s]*)?")
 
+    for msg_html in msgs_html:
+        soup = BeautifulSoup(msg_html, "lxml")
         divs = soup.select("div")
 
         for div in divs:
-            if div.getText().startswith("magnet:"):
-                yield div.getText()
+            if regex.search(div.getText()):
+                # The text in the <div> element matches the pattern of
+                # a magnetic link
+                magnet = regex.search(div.getText()).group()
+                logging.info("Magnet link found and extracted.")
 
-
-def launch_threads(magnet):
-    """
-    """
-
-    thread = Thread(target=open_magnet, args=(magnet,))
-    thread.start()
+                yield magnet
 
 
 def open_magnet(magnet):
     """
+    Opens qBittorrent with a magnetic link. Takes in a string of a magnetic
+    link.
     """
 
-    process = Popen([TORRENT, magnet])
+    subprocess.Popen([TORRENT, magnet])
 
-    while True:
-        if process.poll() != None:
-            send_txt(magnet)
-            break
-        
-        time.sleep(2)
+    send_txt(magnet)
 
 
 def send_txt(magnet):
     """
+    Sends a text message containing the name of the file in a magnetic link.
+    Takes in a string with a magnetic link.
     """
 
-    txt = magnet.split("=")[2]
-    print(txt)
+    filename = magnet.split("=")[2]
+    if "+" in filename:
+        filename.replace("+", " ")
+
+    account = TWILIO_ACCT
+    token = TWILIO_TOKEN
+    sms_client = Client(account, token)
+    sms_body = f"The file {filename} has started downloading."
+
+    sms_client.messages.create(
+        to=SMS_TO,
+        from_=SMS_FROM,
+        body=sms_body
+    )
+
+    logging.info(f"SMS for thread {magnet} sent.")
 
 
 def main():
@@ -245,23 +283,31 @@ def main():
 
     # Start program at user's command
     print("Press ENTER to start program. Press CTRL+C to exit.")
+
     input()
     print("Program started.")
+    logging.info("Program started.")
 
     try:
         while True:
+            logging.info("New program cycle.")
             new_mail = check_email(username, pwd, key, email)
 
             if new_mail:
-                process_msgs(new_mail)
+                magnets = process_msgs(new_mail)
+
+                for magnet in magnets:
+                    open_magnet(magnet)
 
             # Wait 15 minutes to check again
             time.sleep(60 * 15)
 
     except KeyboardInterrupt:
         print("Program stopped. Quitting...")
+        logging.info("Program stopped.")
 
         quit()
+
 
 if __name__ == "__main__":
     main()
